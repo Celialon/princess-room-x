@@ -75,6 +75,16 @@
   input:focus, select:focus { outline: none; border-color: var(--pink); }
 
   .acc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  /* the account's own picture, and the same picture used as a switch */
+  .avatar { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; padding: 0; flex-shrink: 0;
+            background: var(--input-bg); border: 1px solid var(--border-light); cursor: pointer;
+            display: flex; align-items: center; justify-content: center; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .avatar span { font-size: 13px; font-weight: 700; color: var(--text-3); }
+  .acc-switch { display: flex; gap: 8px; margin-bottom: 10px; }
+  .avatar.sw { width: 32px; height: 32px; }
+  .avatar.sw.on { border: 2px solid var(--pink); box-shadow: 0 0 8px rgba(224,96,122,.4); }
+  .avatar.sw.off { opacity: .4; filter: grayscale(1); }
   .acc-row:last-child { border-bottom: none; }
   .acc-name { font-weight: 700; font-size: 14px; flex: 1; }
   .acc-meta { font-size: 11px; color: var(--text-3); }
@@ -105,6 +115,13 @@
                 font-size: 13px; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
   .rank { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; color: var(--pink); text-align: center; }
   .rname { font-size: 13px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .rname.pick { cursor: pointer; text-decoration: underline; text-decoration-style: dotted;
+                text-underline-offset: 3px; text-decoration-color: var(--text-3); }
+  .rname.pick:active { color: var(--pink); }
+  /* the banner naming the product Top videos is narrowed to */
+  .only-bar { display: flex; align-items: center; gap: 10px; background: var(--pink-dim);
+              border: 1px solid rgba(224,96,122,.35); border-radius: 10px; padding: 7px 10px; margin-bottom: 8px; }
+  .only-bar .name { flex: 1; font-size: 12px; font-weight: 700; color: var(--pink); line-height: 1.3; }
   .rmeta { font-size: 10.5px; color: var(--text-3); font-weight: 600; margin-top: 2px; }
   .rval { text-align: right; white-space: nowrap; }
   .rval .m { font-size: 15px; font-weight: 700; color: var(--green); }
@@ -207,12 +224,13 @@
           <button id="prod-gmv" onclick="setSort('prod','gmv')">🛍️ GMV</button>
         </div>
       </div>
-      <div class="sub" style="margin:-4px 0 10px">Tap a product's square to give it a photo</div>
+      <div class="sub" style="margin:-4px 0 8px">Tap a product's square to give it a photo, or its name for its videos</div>
+      <div id="prod-accs"></div>
       <div id="products"></div>
       <input type="file" id="photo-file" accept="image/*" hidden>
     </div>
 
-    <div class="card">
+    <div class="card" id="videos-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <h2 style="margin:0">Top videos</h2>
         <div class="tabs" style="width:186px">
@@ -221,6 +239,8 @@
         </div>
       </div>
       <div class="sub" style="margin:4px 0 10px">The videos that actually made the sales</div>
+      <div id="vid-accs"></div>
+      <div id="only-bar"></div>
       <div id="videos"></div>
     </div>
 
@@ -246,6 +266,7 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 let DB = load();
 let _sortP = 'comm';     // how each list is ranked
 let _sortV = 'comm';
+let _onlyProduct = null; // when set, Top videos shows this product's videos alone
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
@@ -261,6 +282,7 @@ DB.products = DB.products || {};      // handle → pid → {name, days:{iso:{c,
 DB.videos = DB.videos || {};          // handle → cid → {name, days:{iso:{c,g,o,ac}}, vids}
 DB.covers = DB.covers || {};          // cid → {url, at} — the video's thumbnail
 DB.photos = DB.photos || {};          // pid → the photo its owner gave the product
+DB.avatars = DB.avatars || {};        // handle → the account's profile picture
 
 // ─── Video covers ───────────────────────────────────────────
 // The export carries no images, so each cover comes from TikTok's public oEmbed
@@ -375,6 +397,9 @@ function renderAccounts() {
   el.innerHTML = DB.accounts.map(a => {
     const months = new Set(Object.keys(DB.days[a.handle] || {}).map(d => d.slice(0, 7)));
     return `<div class="acc-row">
+      <button class="avatar" onclick="pickAvatar('${esc(a.handle)}')" title="Add a photo">
+        ${DB.avatars[a.handle] ? `<img src="${DB.avatars[a.handle]}" alt="">`
+                               : `<span>${esc(a.handle.slice(0, 1).toUpperCase())}</span>`}</button>
       <div style="flex:1">
         <div class="acc-name">@${esc(a.handle)}</div>
         <div class="acc-meta">${a.market} · ${a.cur}${a.cut ? ` · agency ${a.cut}%` : ''} · ${months.size ? months.size + ' month' + (months.size > 1 ? 's' : '') + ' loaded' : 'no data yet'}</div>
@@ -752,6 +777,7 @@ function render() {
   // ── products ──
   const prods = [];
   for (const a of DB.accounts) {
+    if (!accOn(a.handle)) continue;
     for (const [pid, p] of Object.entries(DB.products[a.handle] || {})) {
       const s = sumDays(p.days, from, to, a.cut);
       if (s.o) prods.push({ id: pid, name: p.name, cur: a.cur, handle: a.handle, ...s });
@@ -765,7 +791,8 @@ function render() {
       <div class="rank">${offP + i + 1}</div>
       ${prodThumb(p.id)}
       <div>
-        <div class="rname">${esc(shortName(p.name))}</div>
+        <div class="rname pick" onclick="onlyProduct('${esc(p.handle)}', '${esc(p.id)}')"
+             title="Only this product's videos">${esc(shortName(p.name))}</div>
         <div class="bar"><i style="width:${(_sortP === 'gmv' ? p.g : p.c) / maxP * 100}%"></i></div>
         <div class="rmeta">@${esc(p.handle)} · ${p.o} orders · organic ${rate(p.c - p.ac, p.g - p.ag)} · ads ${p.ag ? rate(p.ac, p.ag) : '—'}</div>
       </div>
@@ -774,9 +801,14 @@ function render() {
     || '<div class="sub" style="font-style:italic">Nothing in this range.</div>';
 
   // ── videos ──
+  // tapping a product name narrows this list to the videos that sold it
+  const only = _onlyProduct;
+  const onlyVids = only ? ((DB.products[only.handle] || {})[only.pid] || {}).vids : null;
   const vids = [];
   for (const a of DB.accounts) {
+    if (!accOn(a.handle) || (only && a.handle !== only.handle)) continue;
     for (const [cid, v] of Object.entries(DB.videos[a.handle] || {})) {
+      if (only && !(onlyVids && onlyVids[cid])) continue;
       const s = sumDays(v.days, from, to, a.cut);
       if (s.o) vids.push({ id: cid, name: v.name, cur: a.cur, handle: a.handle, ...s });
     }
@@ -800,7 +832,19 @@ function render() {
       <div class="rval"><div class="m">${money(v.c, v.cur)}</div><div class="s">${money(v.g, v.cur)}</div></div>
     </div>`;
   }).join('') + pager('vid', offV, vids.length)
-    || '<div class="sub" style="font-style:italic">No videos in this range — the export needs the "Content ID" column.</div>';
+    || `<div class="sub" style="font-style:italic">${only
+          ? (onlyVids ? 'No videos sold this one in this range.'
+                      : 'Drop the export for this account again — the earlier import did not record which video sold what.')
+          : 'No videos in this range — the export needs the "Content ID" column.'}</div>`;
+
+  document.getElementById('prod-accs').innerHTML = accSwitches();
+  document.getElementById('vid-accs').innerHTML = accSwitches();
+
+  // the banner that says which product the list is narrowed to
+  document.getElementById('only-bar').innerHTML = only ? `<div class="only-bar">
+      <div class="name">🎬 ${esc(shortName(only.name))}</div>
+      <button class="btn sm outline" onclick="allProducts()">← All videos</button>
+    </div>` : '';
 
   // the covers arrive after the figures: only the videos on screen are looked up
   ensureCovers(onScreen);
@@ -825,6 +869,36 @@ function pager(which, offset, total) {
   </div>`;
 }
 function turnPage(which, step) { _page[which] += step; render(); }
+
+// ─── Which accounts are being shown ─────────────────────────────────────────
+// The profile pictures double as switches: tap one and it drops out of the two
+// lists, exactly the way the ringed avatars work in the original room.
+const _accOff = {};
+function accSwitches() {
+  if (DB.accounts.length < 2) return '';
+  return `<div class="acc-switch">${DB.accounts.map(a => `
+    <button class="avatar sw ${_accOff[a.handle] ? 'off' : 'on'}" onclick="toggleAcc('${esc(a.handle)}')"
+            title="@${esc(a.handle)}">
+      ${DB.avatars[a.handle] ? `<img src="${DB.avatars[a.handle]}" alt="">`
+                             : `<span>${esc(a.handle.slice(0, 1).toUpperCase())}</span>`}
+    </button>`).join('')}</div>`;
+}
+function toggleAcc(handle) {
+  _accOff[handle] = !_accOff[handle];
+  resetPages();
+  render();
+}
+function accOn(handle) { return !_accOff[handle]; }
+
+// Top videos, narrowed to one product and back again
+function onlyProduct(handle, pid) {
+  const p = (DB.products[handle] || {})[pid];
+  _onlyProduct = { handle, pid, name: p ? p.name : '' };
+  _page.vid = 0;
+  render();
+  document.getElementById('videos-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function allProducts() { _onlyProduct = null; _page.vid = 0; render(); }
 function resetPages() { _page.prod = 0; _page.vid = 0; }
 
 // ─── Product photos ─────────────────────────────────────────
@@ -837,7 +911,9 @@ function prodThumb(pid) {
   return `<button class="thumb prod" onclick="pickPhoto('${esc(pid)}')" title="Add a photo">
     ${src ? `<img src="${src}" alt="">` : '<span class="thumb-add">+</span>'}</button>`;
 }
-function pickPhoto(pid) {
+function pickPhoto(pid) { pickImage('photos', pid); }
+function pickAvatar(handle) { pickImage('avatars', handle); }
+function pickImage(store, key) {
   const input = document.getElementById('photo-file');
   input.onchange = () => {
     const f = input.files && input.files[0];
@@ -850,8 +926,8 @@ function pickPhoto(pid) {
       c.width = c.height = side;
       const cut = Math.min(img.width, img.height);
       c.getContext('2d').drawImage(img, (img.width - cut) / 2, (img.height - cut) / 2, cut, cut, 0, 0, side, side);
-      DB.photos = DB.photos || {};
-      DB.photos[pid] = c.toDataURL('image/jpeg', 0.72);
+      DB[store] = DB[store] || {};
+      DB[store][key] = c.toDataURL('image/jpeg', 0.72);
       save(); render();
       URL.revokeObjectURL(img.src);
     };
