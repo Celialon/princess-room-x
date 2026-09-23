@@ -1,0 +1,15 @@
+{
+  "name": "Princess Room X",
+  "short_name": "Princess X",
+  "description": "See what you really earn on TikTok Shop: per product, per video, per day.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    { "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}

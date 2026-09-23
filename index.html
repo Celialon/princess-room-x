@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Princess Room X</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Princess Room X">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Raleway:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --input-bg: #1c2128;
+    --border: #21262d; --border-light: #30363d;
+    --text-1: #f0dce8; --text-2: #c9a9bb; --text-3: #6a4858;
+    --pink: #e0607a; --pink-light: #ff7aa2; --pink-dim: rgba(224,96,122,0.12);
+    --green: #22c55e; --amber: #f59e0b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text-1);
+    font-family: 'Raleway', -apple-system, sans-serif;
+    font-variant-numeric: lining-nums tabular-nums;
+    padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px);
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+
+  header { padding: 18px 0 14px; display: flex; align-items: center; gap: 12px; }
+  header img { width: 38px; height: 38px; border-radius: 50%; }
+  .refresh {
+    margin-left: auto; background: none; border: 1px solid var(--border-light); color: var(--text-2);
+    width: 34px; height: 34px; border-radius: 50%; font-size: 15px; cursor: pointer; flex-shrink: 0;
+  }
+  .refresh:active { transform: rotate(180deg); transition: transform .3s; }
+  .title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; line-height: 1.15; letter-spacing: .5px; }
+  /* the collaboration mark between the room and whoever owns it */
+  .who-line { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .x-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 21px; height: 21px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--pink-light), var(--pink));
+    color: #fff; font-family: 'Raleway', sans-serif; font-size: 10px; font-weight: 700;
+    box-shadow: 0 0 10px rgba(224,96,122,.45);
+  }
+  .name-input {
+    background: none; border: none; border-bottom: 1px dashed var(--border-light);
+    color: var(--pink); font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700;
+    padding: 0 2px 2px; width: 9ch; max-width: 42vw;
+  }
+  .name-input:focus { outline: none; border-bottom-color: var(--pink); }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+  .card h2 { font-family: 'Playfair Display', serif; font-size: 17px; margin: 0 0 4px; font-weight: 700; }
+  .sub { font-size: 12px; color: var(--text-3); }
+  .label { font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-3); font-weight: 700; }
+
+  .btn {
+    background: var(--pink); border: none; color: #fff; font-family: 'Raleway', sans-serif;
+    font-size: 13px; font-weight: 700; border-radius: 10px; padding: 10px 16px; cursor: pointer;
+  }
+  .btn.outline { background: none; border: 1px solid var(--border-light); color: var(--text-2); }
+  .btn.sm { font-size: 11.5px; padding: 7px 12px; }
+  .btn:active { transform: scale(.97); }
+
+  input[type=text], input[type=month], select {
+    background: var(--input-bg); border: 1px solid var(--border-light); color: var(--text-1);
+    border-radius: 10px; padding: 10px 12px; font-family: 'Raleway', sans-serif; font-size: 14px; width: 100%;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--pink); }
+
+  .acc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .acc-row:last-child { border-bottom: none; }
+  .acc-name { font-weight: 700; font-size: 14px; flex: 1; }
+  .acc-meta { font-size: 11px; color: var(--text-3); }
+  .chip { font-size: 10px; font-weight: 700; border: 1px solid var(--border-light); border-radius: 999px; padding: 2px 8px; color: var(--text-3); }
+
+  .drop {
+    border: 1.5px dashed var(--border-light); border-radius: 14px; padding: 22px 16px; text-align: center;
+    color: var(--text-3); font-size: 13px; transition: all .15s;
+  }
+  .drop.hot { border-color: var(--pink); color: var(--pink); background: var(--pink-dim); }
+
+  .stat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  .stat > div { background: var(--input-bg); border-radius: 10px; padding: 10px 12px; }
+  .stat .v { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .v.green { color: var(--green); }
+
+  .row { display: grid; grid-template-columns: 22px 38px 1fr auto; gap: 9px; align-items: center;
+         background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; margin-bottom: 6px; }
+  /* the video cover, doubling as the link to the video itself */
+  .thumb { position: relative; width: 38px; height: 50px; border-radius: 8px; overflow: hidden;
+           display: flex; align-items: center; justify-content: center; background: var(--card);
+           border: 1px solid var(--border); text-decoration: none; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb.empty { font-size: 15px; opacity: .35; }
+  .thumb-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                font-size: 13px; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
+  .rank { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; color: var(--pink); text-align: center; }
+  .rname { font-size: 13px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .rmeta { font-size: 10.5px; color: var(--text-3); font-weight: 600; margin-top: 2px; }
+  .rval { text-align: right; white-space: nowrap; }
+  .rval .m { font-size: 15px; font-weight: 700; color: var(--green); }
+  .rval .s { font-size: 10px; color: var(--text-3); font-weight: 700; }
+  .bar { height: 5px; background: var(--card); border-radius: 3px; overflow: hidden; margin: 4px 0 2px; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--pink-light), var(--pink)); }
+
+  .tabs { display: flex; gap: 0; border: 1px solid var(--border-light); border-radius: 10px; overflow: hidden; }
+  .tabs button { flex: 1; background: none; border: none; color: var(--text-3); font-family: 'Raleway', sans-serif;
+                 font-size: 12px; font-weight: 700; padding: 8px 6px; cursor: pointer; }
+  .tabs button.on { background: var(--pink-dim); color: var(--pink); }
+
+  .ask-box { background: var(--pink-dim); border: 1px solid rgba(224,96,122,.35); border-radius: 12px; padding: 10px 14px; margin: 12px 0 2px; }
+  .ask-month { font-family: 'Playfair Display', serif; font-size: 19px; font-weight: 700; color: var(--pink); margin-top: 2px; }
+  .steps { counter-reset: s; padding: 0; margin: 10px 0 0; list-style: none; }
+  .steps li { counter-increment: s; position: relative; padding: 0 0 10px 30px; font-size: 13px; color: var(--text-2); line-height: 1.45; }
+  .steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--pink-dim); color: var(--pink); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .hide { display: none !important; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
+    background: var(--card); border: 1px solid var(--pink); color: var(--text-1);
+    border-radius: 999px; padding: 10px 18px; font-size: 13px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <img src="icon.png" alt="">
+    <div class="title">PRINCESS ROOM
+      <div class="who-line"><span class="x-badge">✕</span><input class="name-input" id="who" placeholder="your name" maxlength="18"></div>
+    </div>
+    <button class="refresh" onclick="hardRefresh()" title="Reload the app">↻</button>
+  </header>
+
+  <!-- ── Accounts ── -->
+  <div class="card">
+    <h2>Your accounts</h2>
+    <div class="sub">The TikTok Shop accounts you create content for</div>
+    <div id="accounts"></div>
+    <div id="add-account" class="hide" style="margin-top:12px;display:grid;gap:8px">
+      <input type="text" id="acc-handle" placeholder="@yourhandle" autocapitalize="off" autocorrect="off">
+      <select id="acc-market">
+        <option value="ES|€|0">🇪🇸 Spain · €</option>
+        <option value="US|$|5">🇺🇸 USA · $ (agency takes 5%)</option>
+        <option value="UK|£|0">🇬🇧 UK · £</option>
+        <option value="EU|€|0">🇪🇺 Europe · €</option>
+        <option value="OTHER|€|0">🌍 Other · €</option>
+      </select>
+      <div style="display:flex;gap:8px">
+        <button class="btn sm" onclick="saveAccount()">Save account</button>
+        <button class="btn sm outline" onclick="toggleAdd(false)">Cancel</button>
+      </div>
+    </div>
+    <button class="btn sm outline" id="add-btn" style="margin-top:12px" onclick="toggleAdd(true)">+ Add account</button>
+  </div>
+
+  <!-- ── Import ── -->
+  <div class="card">
+    <h2>Add your sales</h2>
+    <div class="sub">Your figures come from the order export — the app never asks for your password</div>
+    <div id="ask"></div>
+    <ol class="steps" id="steps"></ol>
+    <label class="drop" id="drop" for="file" style="display:block;margin-top:12px">
+      <div style="font-size:26px">📄</div>
+      <b style="color:var(--text-2)" id="drop-label">Tap to choose your Excel</b><br>
+      <span style="font-size:11.5px">or drag it here · .xlsx</span>
+      <input type="file" id="file" accept=".xlsx,.xls" multiple class="hide">
+    </label>
+    <div id="import-log" class="sub" style="margin-top:10px"></div>
+  </div>
+
+  <!-- ── Dashboard ── -->
+  <div id="dash" class="hide">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0">Earnings</h2>
+        <select id="range" style="width:auto" onchange="render()"></select>
+      </div>
+      <div id="totals"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <h2 style="margin:0">Top products</h2>
+        <div class="tabs" style="width:170px">
+          <button id="sort-comm" class="on" onclick="setSort('comm')">💰 Earned</button>
+          <button id="sort-gmv" onclick="setSort('gmv')">🛍️ Sales</button>
+        </div>
+      </div>
+      <div id="products"></div>
+    </div>
+
+    <div class="card">
+      <h2>Top videos</h2>
+      <div class="sub" style="margin-bottom:10px">The videos that actually made the sales</div>
+      <div id="videos"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm outline" onclick="exportData()">⬇️ Back up my data</button>
+        <button class="btn sm outline" onclick="wipe()">Delete everything</button>
+      </div>
+      <div class="sub" style="margin-top:8px">Everything stays on this phone. Nothing is uploaded anywhere.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════
+// Creator Room — reads TikTok Shop order exports in the browser.
+// Nothing leaves the device: files are parsed here and the totals are kept
+// in this browser's storage.
+// ═══════════════════════════════════════════════════════════
+const KEY = 'creator-room-v1';
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+let DB = load();
+let _sort = 'comm';
+
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(DB)); }
+  catch (e) { toast('Storage is full — back up and delete old months'); }
+}
+DB.name = DB.name || '';
+DB.accounts = DB.accounts || [];      // [{handle, market, cur, cut}]
+DB.days = DB.days || {};              // handle → iso → {c,g,o}
+DB.products = DB.products || {};      // handle → pid → {name, days:{iso:{c,g,o,u,ac,ag}}}
+DB.videos = DB.videos || {};          // handle → cid → {name, days:{iso:{c,g,o,ac}}, vids}
+DB.covers = DB.covers || {};          // cid → {url, at} — the video's thumbnail
+
+// ─── Video covers ───────────────────────────────────────────
+// The export carries no images, so each cover comes from TikTok's public oEmbed
+// endpoint — one call per video, then kept here so it only happens once. The CDN
+// link expires after a few days, which is what the timestamp is for.
+const COVER_TTL = 2 * 864e5;          // a cover is refreshed every couple of days
+const COVER_RETRY = 36e5;             // a video that gave nothing is retried in an hour
+let _coversRunning = false;
+
+function coverOf(cid) {
+  const c = DB.covers[cid];
+  return c && c.url ? c.url : '';
+}
+function coverStale(cid) {
+  const c = DB.covers[cid];
+  if (!c) return true;
+  return Date.now() - c.at > (c.url ? COVER_TTL : COVER_RETRY);
+}
+async function oembedCover(handle, id) {
+  // TikTok resolves the video by its id, so a wrong handle in the link is fine
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetch(`https://www.tiktok.com/oembed?url=https://www.tiktok.com/@${encodeURIComponent(handle)}/video/${encodeURIComponent(id)}`);
+      const j = await r.json();
+      if (j && j.thumbnail_url) return { url: j.thumbnail_url, caption: j.title || '' };
+    } catch (e) { /* offline, or the phone is on a network that blocks it */ }
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return null;
+}
+// Only the videos actually on screen are looked up, one at a time so TikTok
+// doesn't start refusing the calls.
+async function ensureCovers(list) {
+  if (_coversRunning) return;
+  const need = list.filter(v => coverStale(v.id));
+  if (!need.length) return;
+  _coversRunning = true;
+  let got = 0;
+  for (const v of need) {
+    const hit = await oembedCover(v.handle, v.id);
+    DB.covers[v.id] = { url: hit ? hit.url : '', at: Date.now() };
+    if (hit) { got++; if (hit.caption) DB.covers[v.id].caption = hit.caption; }
+    await new Promise(r => setTimeout(r, 120));
+  }
+  _coversRunning = false;
+  if (got) { save(); render(); }
+}
+
+// Installed to the home screen there is no address bar to pull down, so this
+// fetches the app again, skipping whatever the phone had cached.
+async function hardRefresh() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.update().catch(() => {})));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (e) { /* nothing cached, nothing to clear */ }
+  location.replace(location.pathname + '?v=' + Date.now());
+}
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const money = (v, cur) => cur === '$' || cur === '£'
+  ? `${cur}${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  : `${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`;
+const rate = (c, g) => g ? (c / g * 100).toFixed(1) + '%' : '—';
+const shortName = n => String(n || '').split(/\s[|–—-]\s|\s?[|]\s?|,/)[0].trim().slice(0, 60);
+
+// ─── Name ───────────────────────────────────────────────────
+const who = document.getElementById('who');
+who.value = DB.name;
+who.addEventListener('input', () => { DB.name = who.value.trim(); save(); });
+
+// ─── Accounts ───────────────────────────────────────────────
+function toggleAdd(on) {
+  document.getElementById('add-account').classList.toggle('hide', !on);
+  document.getElementById('add-btn').classList.toggle('hide', on);
+  if (on) document.getElementById('acc-handle').focus();
+}
+function saveAccount() {
+  let handle = document.getElementById('acc-handle').value.trim().replace(/^@/, '');
+  if (!handle) { toast('Type your account name'); return; }
+  const [market, cur, cut] = document.getElementById('acc-market').value.split('|');
+  if (DB.accounts.some(a => a.handle.toLowerCase() === handle.toLowerCase())) { toast('That account is already here'); return; }
+  DB.accounts.push({ handle, market, cur, cut: +cut });
+  save();
+  document.getElementById('acc-handle').value = '';
+  toggleAdd(false);
+  renderAccounts(); render();
+}
+function removeAccount(handle) {
+  if (!confirm(`Remove @${handle} and its figures?`)) return;
+  DB.accounts = DB.accounts.filter(a => a.handle !== handle);
+  delete DB.days[handle]; delete DB.products[handle]; delete DB.videos[handle];
+  save(); renderAccounts(); render();
+}
+function renderAccounts() {
+  const el = document.getElementById('accounts');
+  if (!DB.accounts.length) {
+    el.innerHTML = `<div class="sub" style="padding:10px 0;font-style:italic">No accounts yet — add your first one below.</div>`;
+    return;
+  }
+  el.innerHTML = DB.accounts.map(a => {
+    const months = new Set(Object.keys(DB.days[a.handle] || {}).map(d => d.slice(0, 7)));
+    return `<div class="acc-row">
+      <div style="flex:1">
+        <div class="acc-name">@${esc(a.handle)}</div>
+        <div class="acc-meta">${a.market} · ${a.cur}${a.cut ? ` · agency ${a.cut}%` : ''} · ${months.size ? months.size + ' month' + (months.size > 1 ? 's' : '') + ' loaded' : 'no data yet'}</div>
+      </div>
+      <button class="btn sm outline" onclick="removeAccount('${esc(a.handle)}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ─── Reading the export ─────────────────────────────────────
+function num(v) {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim().replace(/\s/g, '');
+  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (s.includes(',')) s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+function isoDate(d) {                       // "23/09/2026 20:08:53" → "2026-09-23"
+  if (d instanceof Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  const s = String(d || '').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);              // 2026-09-23
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/);          // 23/09/2026 · 23-09-2026
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return s.slice(0, 10);
+}
+
+// ─── Reading the columns in any language ────────────────────
+// TikTok exports the file in the language of the shop, so the columns are found
+// by what they mean, not by their English wording. Each field lists the sets of
+// words a header must contain; accents and punctuation don't count.
+const NORM = s => String(s || '').toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+
+// Singular and plural are the same word here: TikTok writes "Est. commission base"
+// in English but "Base de comisiones est." in Spanish. Applied to the headers and
+// to the words below alike, so both sides always meet in the middle.
+const STEM = w => (w.length > 3 ? w.replace(/(es|s)$/, '') : w);
+const STEMS = words => words.map(STEM);
+
+const COLUMNS = {
+  date:     [['order', 'date'], ['fecha', 'pedido'], ['data', 'ordine'], ['date', 'commande'], ['bestelldatum'], ['datum', 'bestellung']],
+  status:   [['order', 'settlement', 'status'], ['estado', 'liquidacion'], ['estado', 'pedido'], ['stato', 'liquidazione'], ['statut', 'reglement'], ['status', 'abrechnung']],
+  pid:      [['product', 'id'], ['id', 'producto'], ['id', 'prodotto'], ['id', 'produit'], ['produkt', 'id']],
+  pname:    [['product', 'name'], ['nombre', 'producto'], ['nome', 'prodotto'], ['nom', 'produit'], ['produktname'], ['produkt', 'name']],
+  cid:      [['content', 'id'], ['id', 'contenido'], ['id', 'contenuto'], ['id', 'contenu'], ['inhalt', 'id']],
+  base:     [['est', 'commission', 'base'], ['base', 'comision', 'est'], ['base', 'comision', 'estimada'], ['base', 'de', 'comision', 'estimada'],
+             ['base', 'commissione', 'stimata'], ['base', 'commission', 'estimee'], ['geschatzte', 'provisionsbasis']],
+  standard: [['est', 'standard', 'commission'], ['comision', 'estandar', 'est'], ['comision', 'estandar', 'estimada'],
+             ['commissione', 'standard', 'stimata'], ['commission', 'standard', 'estimee'], ['geschatzte', 'standardprovision']],
+  ads:      [['est', 'shop', 'ads', 'commission'], ['comision', 'shop', 'ads', 'est'], ['comision', 'de', 'shop', 'ads', 'estimada'],
+             ['comision', 'anuncios', 'est'], ['commissione', 'shop', 'ads', 'stimata'], ['geschatzte', 'shop', 'ads', 'provision']],
+  bonus:    [['est', 'bonus'], ['bonificacion', 'est'], ['bonificacion', 'estimada'], ['bono', 'est'], ['bonus', 'stimato'], ['geschatzter', 'bonus']],
+  sold:     [['items', 'sold'], ['articulos', 'vendidos'], ['unidades', 'vendidas'], ['articoli', 'venduti'], ['articles', 'vendus'], ['verkaufte', 'artikel']],
+  refunded: [['items', 'refunded'], ['articulos', 'reembolsados'], ['unidades', 'reembolsadas'], ['articoli', 'rimborsati'], ['articles', 'rembourses'], ['erstattete', 'artikel']],
+  currency: [['currency'], ['moneda'], ['divisa'], ['valuta'], ['devise'], ['wahrung']],
+};
+
+// The three settlement states, again in whatever language the file came in.
+const PAID_STATUS = ['pending', 'settled', 'pendiente', 'liquidado', 'liquidada', 'pagado', 'pagada',
+                     'in attesa', 'liquidato', 'en attente', 'regle', 'ausstehend', 'abgerechnet'];
+const UNPAID_STATUS = ['ineligible', 'no apto', 'inelegible', 'no valido', 'no elegible', 'non idoneo',
+                       'non eligible', 'nicht berechtigt', 'cancelled', 'canceled', 'cancelado', 'reembolsado', 'refunded'];
+
+function findColumns(header) {
+  const cells = header.map(h => STEMS(NORM(h)));
+  const pick = sets => {
+    for (const want of sets.map(STEMS)) {
+      const i = cells.findIndex(words => words.length && want.every(w => words.includes(w)));
+      if (i !== -1) return i;
+    }
+    return undefined;
+  };
+  const out = {};
+  for (const [field, sets] of Object.entries(COLUMNS)) out[field] = pick(sets);
+  return out;
+}
+
+function importRows(rows, account) {
+  const C = findColumns(rows[0] || []);
+  const NEEDED = { date: 'order date', status: 'settlement status', pid: 'product ID',
+                   pname: 'product name', base: 'estimated commission base' };
+  const missing = Object.entries(NEEDED).filter(([f]) => C[f] === undefined).map(([, label]) => label);
+  if (missing.length) {
+    const found = (rows[0] || []).filter(Boolean).map(h => `“${String(h).trim()}”`).join(', ');
+    throw new Error(`This file has no ${missing.join(' / ')} column. What it does have: ${found || '(nothing readable)'}`);
+  }
+  const at = (row, field) => C[field] === undefined ? undefined : row[C[field]];
+  const unknownStatus = new Set();
+
+  const acc = account.handle;
+  DB.days[acc] = DB.days[acc] || {}; DB.products[acc] = DB.products[acc] || {}; DB.videos[acc] = DB.videos[acc] || {};
+  const touchedDays = new Set();
+  let paid = 0, dropped = 0;
+
+  // A re-imported month must replace the old figures, not add to them: clear
+  // every day this file covers before writing.
+  const dates = rows.slice(1).filter(r => at(r, 'date')).map(r => isoDate(at(r, 'date')));
+  const covered = new Set(dates);
+  for (const d of covered) {
+    delete DB.days[acc][d];
+    for (const p of Object.values(DB.products[acc])) delete p.days[d];
+    for (const v of Object.values(DB.videos[acc])) delete v.days[d];
+  }
+
+  for (const r of rows.slice(1)) {
+    if (!at(r, 'date')) continue;
+    const status = NORM(at(r, 'status')).join(' ');
+    if (!PAID_STATUS.includes(status)) {                  // refunded / cancelled: never paid
+      if (status && !UNPAID_STATUS.includes(status)) unknownStatus.add(String(at(r, 'status')).trim());
+      dropped++; continue;
+    }
+    const d = isoDate(at(r, 'date'));
+    const adsRaw = at(r, 'ads');
+    const adsComm = num(adsRaw);
+    const isAds = adsRaw !== null && adsRaw !== undefined && String(adsRaw).trim() !== '';
+    const comm = num(at(r, 'standard')) + adsComm + num(at(r, 'bonus'));
+    const gmv = num(at(r, 'base'));
+    const units = num(at(r, 'sold')) - num(at(r, 'refunded'));
+    paid++; touchedDays.add(d);
+
+    const day = DB.days[acc][d] = DB.days[acc][d] || { c: 0, g: 0, o: 0 };
+    day.c += comm; day.g += gmv; day.o++;
+
+    const pid = String(at(r, 'pid'));
+    const p = DB.products[acc][pid] = DB.products[acc][pid] || { name: '', days: {} };
+    p.name = String(at(r, 'pname') || p.name);            // the latest order's title wins
+    const pd = p.days[d] = p.days[d] || { c: 0, g: 0, o: 0, u: 0, ac: 0, ag: 0 };
+    pd.c += comm; pd.g += gmv; pd.o++; pd.u += units;
+    if (isAds) { pd.ac += comm; pd.ag += gmv; }
+
+    const cid = String(at(r, 'cid') || '');
+    if (cid) {
+      // which videos sold this product, so the best one lends it its cover
+      p.vids = p.vids || {};
+      p.vids[cid] = (p.vids[cid] || 0) + 1;
+      const v = DB.videos[acc][cid] = DB.videos[acc][cid] || { name: '', days: {} };
+      v.name = String(at(r, 'pname') || v.name);
+      const vd = v.days[d] = v.days[d] || { c: 0, g: 0, o: 0, ac: 0 };
+      vd.c += comm; vd.g += gmv; vd.o++;
+      if (isAds) vd.ac += comm;
+    }
+  }
+  // round, and forget products/videos left with nothing
+  const r2 = x => Math.round(x * 100) / 100;
+  for (const d of Object.values(DB.days[acc])) { d.c = r2(d.c); d.g = r2(d.g); }
+  for (const store of [DB.products[acc], DB.videos[acc]]) {
+    for (const [k, item] of Object.entries(store)) {
+      for (const dd of Object.values(item.days)) { dd.c = r2(dd.c); dd.g = r2(dd.g); if (dd.ac) dd.ac = r2(dd.ac); if (dd.ag) dd.ag = r2(dd.ag); }
+      if (!Object.keys(item.days).length) delete store[k];
+    }
+  }
+  const days = [...touchedDays].sort();
+  return { paid, dropped, from: days[0], to: days[days.length - 1], unknownStatus: [...unknownStatus] };
+}
+
+// ─── What the app is asking for right now ───────────────────
+// It walks each account from the current month backwards: once a month is in,
+// it asks for the one before, so she never has to decide what to export next.
+const MONTHS_BACK = 5;
+function monthKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+function loadedMonths(handle) {
+  return new Set(Object.keys(DB.days[handle] || {}).map(d => d.slice(0, 7)));
+}
+function nextAsk() {
+  const now = new Date();
+  for (let back = 0; back <= MONTHS_BACK; back++) {
+    const mk = monthKey(new Date(now.getFullYear(), now.getMonth() - back, 1));
+    for (const a of DB.accounts) if (!loadedMonths(a.handle).has(mk)) return { account: a, mk, back };
+  }
+  return null;
+}
+function renderAsk() {
+  const askEl = document.getElementById('ask');
+  const stepsEl = document.getElementById('steps');
+  const label = document.getElementById('drop-label');
+  // The three steps are always on screen; before there is an account they show
+  // the current month, so she can see what she will be asked for.
+  const steps = (monthName, handle) => `
+    <li>Open <b>TikTok Shop</b> → <b>Affiliate orders</b>${handle ? ` on <b>@${esc(handle)}</b>` : ''}.</li>
+    <li>Pick the date range: <b>${monthName}</b>.</li>
+    <li>Tap the <b>download ⬇️</b> icon.</li>`;
+  const monthName = mk => `${MONTHS[+mk.slice(5) - 1]} ${mk.slice(0, 4)}`;
+
+  if (!DB.accounts.length) {
+    const mk = monthKey(new Date());
+    askEl.innerHTML = `<div class="ask-box">
+      <span class="label">To start</span>
+      <div class="ask-month">${monthName(mk)}</div>
+      <div class="sub">Add your account above, then drop this month's export</div>
+    </div>`;
+    stepsEl.innerHTML = steps(monthName(mk), '');
+    label.textContent = 'Add an account first';
+    return;
+  }
+  const ask = nextAsk();
+  if (!ask) {
+    askEl.innerHTML = `<div class="ask-box">✅ <b>You're up to date.</b> Drop a new file whenever you export one.</div>`;
+    stepsEl.innerHTML = steps(monthName(monthKey(new Date())), '');
+    label.textContent = 'Tap to choose your Excel';
+    window._askAccount = null;
+    return;
+  }
+  const name = monthName(ask.mk);
+  const many = DB.accounts.length > 1;
+  askEl.innerHTML = `<div class="ask-box">
+    <span class="label">Now I need</span>
+    <div class="ask-month">${name}${many ? ` · @${esc(ask.account.handle)}` : ''}</div>
+    <div class="sub">${ask.back === 0 ? 'This month so far — drop it again any day to refresh it'
+                                      : 'One of your past months, so you can compare'}</div>
+  </div>`;
+  stepsEl.innerHTML = steps(name, many ? ask.account.handle : '');
+  label.textContent = `Drop your ${name} file`;
+  window._askAccount = ask.account;
+}
+
+// ─── File handling ──────────────────────────────────────────
+const drop = document.getElementById('drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hot'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hot'); }));
+drop.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+document.getElementById('file').addEventListener('change', e => handleFiles(e.target.files));
+
+async function handleFiles(files) {
+  if (!DB.accounts.length) { toast('Add an account first'); return; }
+  const log = document.getElementById('import-log');
+  for (const f of files) {
+    log.innerHTML = `Reading <b>${esc(f.name)}</b>…`;
+    try {
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: null });
+      if (!rows.length) throw new Error('the file is empty');
+      const account = await pickAccount(f.name);
+      if (!account) { log.innerHTML = 'Import cancelled.'; continue; }
+      const res = importRows(rows, account);
+      save();
+      log.innerHTML = (res.paid
+          ? `✅ <b>@${esc(account.handle)}</b> · ${res.paid} paid orders from ${res.from} to ${res.to}`
+            + (res.dropped ? ` · ${res.dropped} refunded or cancelled left out` : '')
+          : `⚠️ <b>@${esc(account.handle)}</b> · the file was read but no order counted as paid`)
+        // a status this app has never seen means a language it doesn't know yet
+        + (res.unknownStatus.length
+            ? `<br><span style="color:var(--pink)">Unknown order status: ${res.unknownStatus.map(esc).join(', ')} — left out to be safe.</span>`
+            : '');
+      renderAccounts(); render();
+    } catch (err) {
+      log.innerHTML = `⚠️ <b>${esc(f.name)}</b>: ${esc(err.message)}`;
+    }
+  }
+  document.getElementById('file').value = '';
+}
+
+// Which account does this file belong to? One account → no question asked.
+function pickAccount(filename) {
+  if (DB.accounts.length === 1) return Promise.resolve(DB.accounts[0]);
+  // the file usually belongs to whichever account the app just asked for
+  const guess = DB.accounts.find(a => filename.toLowerCase().includes(a.handle.toLowerCase().slice(0, 6))) || window._askAccount;
+  const list = DB.accounts.map((a, i) => `${i + 1}. @${a.handle}`).join('\n');
+  const answer = prompt(`Which account is "${filename}" from?\n\n${list}`, guess ? String(DB.accounts.indexOf(guess) + 1) : '1');
+  const idx = parseInt(answer, 10) - 1;
+  return Promise.resolve(DB.accounts[idx] || null);
+}
+
+// ─── Ranges ─────────────────────────────────────────────────
+function allMonths() {
+  const set = new Set();
+  for (const days of Object.values(DB.days)) for (const d of Object.keys(days)) set.add(d.slice(0, 7));
+  return [...set].sort().reverse();
+}
+function lastDay() {
+  let mx = '';
+  for (const days of Object.values(DB.days)) for (const d of Object.keys(days)) if (d > mx) mx = d;
+  return mx;
+}
+function bounds(key) {
+  const last = lastDay();
+  if (key.startsWith('m')) return { from: key.slice(1) + '-00', to: key.slice(1) + '-99' };
+  if (key === 'all' || !last) return { from: '0000', to: '9999' };
+  const d = new Date(last + 'T12:00:00');
+  d.setDate(d.getDate() - (parseInt(key, 10) - 1));
+  return { from: d.toISOString().slice(0, 10), to: '9999' };
+}
+function rangeOptions() {
+  const sel = document.getElementById('range');
+  const want = [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['all', 'Everything']]
+    .map(([v, t]) => `<option value="${v}">${t}</option>`).join('')
+    + allMonths().map(mk => `<option value="m${mk}">${MONTHS[+mk.slice(5) - 1]} ${mk.slice(0, 4)}</option>`).join('');
+  if (sel.innerHTML !== want) { const keep = sel.value; sel.innerHTML = want; sel.value = keep || '30'; }
+  if (!sel.value) sel.value = '30';
+  return sel.value;
+}
+
+// ─── Dashboard ──────────────────────────────────────────────
+function setSort(s) {
+  _sort = s;
+  document.getElementById('sort-comm').classList.toggle('on', s === 'comm');
+  document.getElementById('sort-gmv').classList.toggle('on', s === 'gmv');
+  render();
+}
+
+function sumDays(days, from, to, cut) {
+  let c = 0, g = 0, o = 0, u = 0, ac = 0, ag = 0;
+  for (const [d, x] of Object.entries(days)) {
+    if (d < from || d > to) continue;
+    c += x.c; g += x.g; o += x.o || 0; u += x.u || 0; ac += x.ac || 0; ag += x.ag || 0;
+  }
+  const k = 1 - (cut || 0) / 100;              // what the agency keeps never reaches her
+  return { c: c * k, g, o, u, ac: ac * k, ag };
+}
+
+function render() {
+  const hasData = Object.values(DB.days).some(d => Object.keys(d).length);
+  document.getElementById('dash').classList.toggle('hide', !hasData);
+  renderAccounts();
+  renderAsk();
+  if (!hasData) return;
+
+  const key = rangeOptions();
+  const { from, to } = bounds(key);
+
+  // ── totals per account, grouped by currency ──
+  const totals = document.getElementById('totals');
+  const perAcc = DB.accounts.map(a => ({ a, ...sumDays(DB.days[a.handle] || {}, from, to, a.cut) })).filter(x => x.o);
+  const byCur = {};
+  for (const x of perAcc) { const t = byCur[x.a.cur] = byCur[x.a.cur] || { c: 0, g: 0, o: 0 }; t.c += x.c; t.g += x.g; t.o += x.o; }
+  totals.innerHTML = Object.entries(byCur).map(([cur, t]) => `
+    <div class="stat">
+      <div><div class="label">Earned</div><div class="v green">${money(t.c, cur)}</div></div>
+      <div><div class="label">Sales</div><div class="v">${money(t.g, cur)}</div></div>
+      <div><div class="label">Rate</div><div class="v">${rate(t.c, t.g)}</div></div>
+    </div>`).join('')
+    + perAcc.map(x => `<div class="acc-row">
+        <div style="flex:1"><div class="acc-name">@${esc(x.a.handle)}</div>
+        <div class="acc-meta">${x.o} orders · ${rate(x.c, x.g)}${x.a.cut ? ` · after ${x.a.cut}% agency` : ''}</div></div>
+        <div class="rval"><div class="m">${money(x.c, x.a.cur)}</div><div class="s">${money(x.g, x.a.cur)} sales</div></div>
+      </div>`).join('');
+
+  // ── products ──
+  const prods = [];
+  for (const a of DB.accounts) {
+    for (const [pid, p] of Object.entries(DB.products[a.handle] || {})) {
+      const s = sumDays(p.days, from, to, a.cut);
+      // the product wears the cover of the video that sold it most
+      const best = Object.entries(p.vids || {}).sort((x, y) => y[1] - x[1])[0];
+      if (s.o) prods.push({ id: pid, name: p.name, cur: a.cur, handle: a.handle, vid: best && best[0], ...s });
+    }
+  }
+  prods.sort((x, y) => _sort === 'gmv' ? y.g - x.g : y.c - x.c);
+  const maxP = prods.length ? (_sort === 'gmv' ? prods[0].g : prods[0].c) : 1;
+  const shown = prods.slice(0, 10);
+  document.getElementById('products').innerHTML = shown.map((p, i) => `
+    <div class="row">
+      <div class="rank">${i + 1}</div>
+      ${thumb(p.vid, p.handle)}
+      <div>
+        <div class="rname">${esc(shortName(p.name))}</div>
+        <div class="bar"><i style="width:${(_sort === 'gmv' ? p.g : p.c) / maxP * 100}%"></i></div>
+        <div class="rmeta">@${esc(p.handle)} · ${p.o} orders · organic ${rate(p.c - p.ac, p.g - p.ag)} · ads ${p.ag ? rate(p.ac, p.ag) : '—'}</div>
+      </div>
+      <div class="rval"><div class="m">${money(p.c, p.cur)}</div><div class="s">${money(p.g, p.cur)}</div></div>
+    </div>`).join('') || '<div class="sub" style="font-style:italic">Nothing in this range.</div>';
+
+  // ── videos ──
+  const vids = [];
+  for (const a of DB.accounts) {
+    for (const [cid, v] of Object.entries(DB.videos[a.handle] || {})) {
+      const s = sumDays(v.days, from, to, a.cut);
+      if (s.o) vids.push({ id: cid, name: v.name, cur: a.cur, handle: a.handle, ...s });
+    }
+  }
+  vids.sort((x, y) => _sort === 'gmv' ? y.g - x.g : y.c - x.c);
+  const maxV = vids.length ? (_sort === 'gmv' ? vids[0].g : vids[0].c) : 1;
+  document.getElementById('videos').innerHTML = vids.slice(0, 10).map((v, i) => {
+    const adsPct = v.c ? v.ac / v.c * 100 : 0;
+    return `<div class="row">
+      <div class="rank">${i + 1}</div>
+      ${thumb(v.id, v.handle, true)}
+      <div>
+        <div class="rname">${esc(shortName(v.name))}
+          <a href="https://www.tiktok.com/@${esc(v.handle)}/video/${esc(v.id)}" target="_blank" rel="noopener"
+             style="color:var(--pink);text-decoration:none;font-size:11px">▶</a></div>
+        <div class="bar"><i style="width:${(_sort === 'gmv' ? v.g : v.c) / maxV * 100}%"></i></div>
+        <div class="rmeta">${v.o} orders · ${rate(v.c, v.g)} · organic ${(100 - adsPct).toFixed(0)}% · ads ${adsPct.toFixed(0)}%</div>
+      </div>
+      <div class="rval"><div class="m">${money(v.c, v.cur)}</div><div class="s">${money(v.g, v.cur)}</div></div>
+    </div>`;
+  }).join('') || '<div class="sub" style="font-style:italic">No videos in this range — the export needs the "Content ID" column.</div>';
+
+  // the covers arrive after the figures: only what is on screen is looked up
+  ensureCovers([...shown.filter(p => p.vid).map(p => ({ id: p.vid, handle: p.handle })),
+                ...vids.slice(0, 10)]);
+}
+
+// A video's cover, or a quiet placeholder while it is still coming
+function thumb(cid, handle, play) {
+  const url = cid ? coverOf(cid) : '';
+  if (!url) return `<div class="thumb empty">${play ? '🎬' : ''}</div>`;
+  return `<a class="thumb" href="https://www.tiktok.com/@${esc(handle)}/video/${esc(cid)}" target="_blank" rel="noopener">
+    <img src="${esc(url)}" alt="" onerror="coverBroken('${esc(cid)}')">
+    ${play ? '<span class="thumb-play">▶</span>' : ''}</a>`;
+}
+// An expired CDN link: drop it so the next render fetches a fresh one
+function coverBroken(cid) {
+  if (DB.covers[cid]) { delete DB.covers[cid]; save(); }
+}
+
+// ─── Data in her hands ──────────────────────────────────────
+function exportData() {
+  const blob = new Blob([JSON.stringify(DB, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `creator-room-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+}
+function wipe() {
+  if (!confirm('Delete every account and every figure from this phone?')) return;
+  localStorage.removeItem(KEY);
+  DB = { name: '', accounts: [], days: {}, products: {}, videos: {} };
+  who.value = '';
+  renderAccounts(); render();
+  document.getElementById('dash').classList.add('hide');
+  toast('All clear');
+}
+
+renderAccounts();
+render();
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+// Ask the browser to treat this data as permanent. Without it a phone that runs
+// short of space — or a Safari that hasn't seen the site in a week — is free to
+// throw the months away. Granted straight away once the app is on the home screen.
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then(already => { if (!already) navigator.storage.persist(); }).catch(() => {});
+}
+</script>
+</body>
+</html>
