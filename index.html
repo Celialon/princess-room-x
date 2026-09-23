@@ -88,6 +88,10 @@
   .acc-row:last-child { border-bottom: none; }
   .acc-name { font-weight: 700; font-size: 14px; flex: 1; }
   .acc-meta { font-size: 11px; color: var(--text-3); }
+  .cur-chip { background: var(--input-bg); border: 1px solid var(--border-light); color: var(--text-2);
+              font-family: inherit; font-size: 11px; font-weight: 700; border-radius: 6px;
+              padding: 1px 7px; cursor: pointer; }
+  .cur-chip:active { border-color: var(--pink); color: var(--pink); }
   .chip { font-size: 10px; font-weight: 700; border: 1px solid var(--border-light); border-radius: 999px; padding: 2px 8px; color: var(--text-3); }
 
   .drop {
@@ -178,7 +182,7 @@
       <input type="text" id="acc-handle" placeholder="@yourhandle" autocapitalize="off" autocorrect="off">
       <select id="acc-market">
         <option value="ES|€|0">🇪🇸 Spain · €</option>
-        <option value="US|$|5">🇺🇸 USA · $ (agency takes 5%)</option>
+        <option value="US|$|0">🇺🇸 USA · $</option>
         <option value="UK|£|0">🇬🇧 UK · £</option>
         <option value="EU|€|0">🇪🇺 Europe · €</option>
         <option value="OTHER|€|0">🌍 Other · €</option>
@@ -384,6 +388,17 @@ function saveAccount() {
   toggleAdd(false);
   renderAccounts(); render();
 }
+// The import picks the currency up from the file, but an account loaded before
+// that can be put right here instead of importing everything again.
+const CUR_ORDER = ['€', '$', '£'];
+function cycleCurrency(handle) {
+  const a = DB.accounts.find(x => x.handle === handle);
+  if (!a) return;
+  a.cur = CUR_ORDER[(CUR_ORDER.indexOf(a.cur) + 1) % CUR_ORDER.length];
+  save(); renderAccounts(); render();
+  toast(`@${handle} shows ${a.cur}`);
+}
+
 function removeAccount(handle) {
   if (!confirm(`Remove @${handle} and its figures?`)) return;
   DB.accounts = DB.accounts.filter(a => a.handle !== handle);
@@ -404,7 +419,8 @@ function renderAccounts() {
                                : `<span>${esc(a.handle.slice(0, 1).toUpperCase())}</span>`}</button>
       <div style="flex:1">
         <div class="acc-name">@${esc(a.handle)}</div>
-        <div class="acc-meta">${a.market} · ${a.cur}${a.cut ? ` · agency ${a.cut}%` : ''} · ${months.size ? months.size + ' month' + (months.size > 1 ? 's' : '') + ' loaded' : 'no data yet'}</div>
+        <div class="acc-meta">${a.market} · <button class="cur-chip" onclick="cycleCurrency('${esc(a.handle)}')"
+             title="The currency this account is paid in">${a.cur}</button> · ${months.size ? months.size + ' month' + (months.size > 1 ? 's' : '') + ' loaded' : 'no data yet'}</div>
       </div>
       <button class="btn sm outline" onclick="removeAccount('${esc(a.handle)}')">✕</button>
     </div>`;
@@ -761,8 +777,7 @@ function sumDays(days, from, to, cut) {
     if (d < from || d > to) continue;
     c += x.c; g += x.g; o += x.o || 0; u += x.u || 0; ac += x.ac || 0; ag += x.ag || 0;
   }
-  const k = 1 - (cut || 0) / 100;              // what the agency keeps never reaches her
-  return { c: c * k, g, o, u, ac: ac * k, ag };
+  return { c, g, o, u, ac, ag };              // exactly what the export says
 }
 
 function render() {
@@ -788,7 +803,7 @@ function render() {
     </div>`).join('')
     + perAcc.map(x => `<div class="acc-row">
         <div style="flex:1"><div class="acc-name">@${esc(x.a.handle)}</div>
-        <div class="acc-meta">${x.o} orders · ${rate(x.c, x.g)}${x.a.cut ? ` · after ${x.a.cut}% agency` : ''}</div></div>
+        <div class="acc-meta">${x.o} orders · ${rate(x.c, x.g)}</div></div>
         <div class="rval"><div class="m">${money(x.c, x.a.cur)}</div><div class="s">${money(x.g, x.a.cur)} sales</div></div>
       </div>`).join('');
 
