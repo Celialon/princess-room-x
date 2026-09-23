@@ -99,6 +99,8 @@
            border: 1px solid var(--border); text-decoration: none; }
   .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb.empty { font-size: 15px; opacity: .35; }
+  .thumb.prod { width: 38px; height: 38px; cursor: pointer; padding: 0; }
+  .thumb-add { color: var(--text-3); font-size: 17px; font-weight: 700; line-height: 1; }
   .thumb-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
                 font-size: 13px; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
   .rank { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; color: var(--pink); text-align: center; }
@@ -197,7 +199,9 @@
           <button id="sort-gmv" onclick="setSort('gmv')">🛍️ Sales</button>
         </div>
       </div>
+      <div class="sub" style="margin:-4px 0 10px">Tap a product's square to give it a photo</div>
       <div id="products"></div>
+      <input type="file" id="photo-file" accept="image/*" hidden>
     </div>
 
     <div class="card">
@@ -241,6 +245,7 @@ DB.days = DB.days || {};              // handle → iso → {c,g,o}
 DB.products = DB.products || {};      // handle → pid → {name, days:{iso:{c,g,o,u,ac,ag}}}
 DB.videos = DB.videos || {};          // handle → cid → {name, days:{iso:{c,g,o,ac}}, vids}
 DB.covers = DB.covers || {};          // cid → {url, at} — the video's thumbnail
+DB.photos = DB.photos || {};          // pid → the photo its owner gave the product
 
 // ─── Video covers ───────────────────────────────────────────
 // The export carries no images, so each cover comes from TikTok's public oEmbed
@@ -703,9 +708,7 @@ function render() {
   for (const a of DB.accounts) {
     for (const [pid, p] of Object.entries(DB.products[a.handle] || {})) {
       const s = sumDays(p.days, from, to, a.cut);
-      // the product wears the cover of the video that sold it most
-      const best = Object.entries(p.vids || {}).sort((x, y) => y[1] - x[1])[0];
-      if (s.o) prods.push({ id: pid, name: p.name, cur: a.cur, handle: a.handle, vid: best && best[0], ...s });
+      if (s.o) prods.push({ id: pid, name: p.name, cur: a.cur, handle: a.handle, ...s });
     }
   }
   prods.sort((x, y) => _sort === 'gmv' ? y.g - x.g : y.c - x.c);
@@ -714,7 +717,7 @@ function render() {
   document.getElementById('products').innerHTML = shown.map((p, i) => `
     <div class="row">
       <div class="rank">${i + 1}</div>
-      ${thumb(p.vid, p.handle)}
+      ${prodThumb(p.id)}
       <div>
         <div class="rname">${esc(shortName(p.name))}</div>
         <div class="bar"><i style="width:${(_sort === 'gmv' ? p.g : p.c) / maxP * 100}%"></i></div>
@@ -749,9 +752,42 @@ function render() {
     </div>`;
   }).join('') || '<div class="sub" style="font-style:italic">No videos in this range — the export needs the "Content ID" column.</div>';
 
-  // the covers arrive after the figures: only what is on screen is looked up
-  ensureCovers([...shown.filter(p => p.vid).map(p => ({ id: p.vid, handle: p.handle })),
-                ...vids.slice(0, 10)]);
+  // the covers arrive after the figures: only the videos on screen are looked up
+  ensureCovers(vids.slice(0, 10));
+}
+
+// ─── Product photos ─────────────────────────────────────────
+// TikTok does not let a web page read the product page, so there is no way to
+// pull the real photo in here. Instead each product keeps whatever picture its
+// owner gives it — a screenshot, the brand's photo — shrunk small enough that a
+// whole catalogue still fits in the phone's storage.
+function prodThumb(pid) {
+  const src = (DB.photos || {})[pid];
+  return `<button class="thumb prod" onclick="pickPhoto('${esc(pid)}')" title="Add a photo">
+    ${src ? `<img src="${src}" alt="">` : '<span class="thumb-add">+</span>'}</button>`;
+}
+function pickPhoto(pid) {
+  const input = document.getElementById('photo-file');
+  input.onchange = () => {
+    const f = input.files && input.files[0];
+    input.value = '';
+    if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const side = 200;                       // square, cropped to the middle
+      const c = document.createElement('canvas');
+      c.width = c.height = side;
+      const cut = Math.min(img.width, img.height);
+      c.getContext('2d').drawImage(img, (img.width - cut) / 2, (img.height - cut) / 2, cut, cut, 0, 0, side, side);
+      DB.photos = DB.photos || {};
+      DB.photos[pid] = c.toDataURL('image/jpeg', 0.72);
+      save(); render();
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => toast('That image could not be read');
+    img.src = URL.createObjectURL(f);
+  };
+  input.click();
 }
 
 // A video's cover, or a quiet placeholder while it is still coming
