@@ -522,20 +522,49 @@ function importRows(rows, account) {
 }
 
 // ─── What the app is asking for right now ───────────────────
-// It walks each account from the current month backwards: once a month is in,
-// it asks for the one before, so she never has to decide what to export next.
+// It walks each account from the current month backwards, so nobody has to
+// decide what to export next. The current month comes on its own, because it is
+// the one that gets dropped again every few days; the older ones come two at a
+// time, since TikTok exports any date range — two months, one file, half the work.
 const MONTHS_BACK = 5;
 function monthKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 function loadedMonths(handle) {
   return new Set(Object.keys(DB.days[handle] || {}).map(d => d.slice(0, 7)));
 }
-function nextAsk() {
+// [[this month], [last two], [two before that], …] — each one oldest first
+function askPlan() {
   const now = new Date();
-  for (let back = 0; back <= MONTHS_BACK; back++) {
-    const mk = monthKey(new Date(now.getFullYear(), now.getMonth() - back, 1));
-    for (const a of DB.accounts) if (!loadedMonths(a.handle).has(mk)) return { account: a, mk, back };
+  const back = i => monthKey(new Date(now.getFullYear(), now.getMonth() - i, 1));
+  const plan = [[back(0)]];
+  for (let i = 1; i <= MONTHS_BACK; i += 2) {
+    plan.push(i + 1 <= MONTHS_BACK ? [back(i + 1), back(i)] : [back(i)]);
+  }
+  return plan;
+}
+function nextAsk() {
+  for (const months of askPlan()) {
+    for (const a of DB.accounts) {
+      const have = loadedMonths(a.handle);
+      if (!months.every(m => have.has(m))) return { account: a, months };
+    }
   }
   return null;
+}
+const monthName = mk => `${MONTHS[+mk.slice(5) - 1]} ${mk.slice(0, 4)}`;
+// "September 2026", or "July + August 2026" when two come together
+function askTitle(months) {
+  if (months.length === 1) return monthName(months[0]);
+  const [a, b] = months;
+  return a.slice(0, 4) === b.slice(0, 4)
+    ? `${MONTHS[+a.slice(5) - 1]} + ${MONTHS[+b.slice(5) - 1]} ${b.slice(0, 4)}`
+    : `${monthName(a)} + ${monthName(b)}`;
+}
+// The date range to pick in TikTok, spelled out
+function askRange(months) {
+  if (months.length === 1) return monthName(months[0]);
+  const last = months[months.length - 1];
+  const endDay = new Date(+last.slice(0, 4), +last.slice(5), 0).getDate();
+  return `1 ${MONTHS[+months[0].slice(5) - 1]} → ${endDay} ${MONTHS[+last.slice(5) - 1]} ${last.slice(0, 4)}`;
 }
 function renderAsk() {
   const askEl = document.getElementById('ask');
@@ -543,11 +572,10 @@ function renderAsk() {
   const label = document.getElementById('drop-label');
   // The three steps are always on screen; before there is an account they show
   // the current month, so she can see what she will be asked for.
-  const steps = (monthName, handle) => `
+  const steps = (range, handle) => `
     <li>Open <b>TikTok Shop</b> → <b>Affiliate orders</b>${handle ? ` on <b>@${esc(handle)}</b>` : ''}.</li>
-    <li>Pick the date range: <b>${monthName}</b>.</li>
+    <li>Pick the date range: <b>${range}</b>.</li>
     <li>Tap the <b>download ⬇️</b> icon.</li>`;
-  const monthName = mk => `${MONTHS[+mk.slice(5) - 1]} ${mk.slice(0, 4)}`;
 
   if (!DB.accounts.length) {
     const mk = monthKey(new Date());
@@ -568,16 +596,17 @@ function renderAsk() {
     window._askAccount = null;
     return;
   }
-  const name = monthName(ask.mk);
+  const title = askTitle(ask.months);
+  const pair = ask.months.length > 1;
   const many = DB.accounts.length > 1;
   askEl.innerHTML = `<div class="ask-box">
     <span class="label">Now I need</span>
-    <div class="ask-month">${name}${many ? ` · @${esc(ask.account.handle)}` : ''}</div>
-    <div class="sub">${ask.back === 0 ? 'This month so far — drop it again any day to refresh it'
-                                      : 'One of your past months, so you can compare'}</div>
+    <div class="ask-month">${title}${many ? ` · @${esc(ask.account.handle)}` : ''}</div>
+    <div class="sub">${pair ? 'Both months in one file — pick the whole range and download once'
+                            : 'This month so far — drop it again any day to refresh it'}</div>
   </div>`;
-  stepsEl.innerHTML = steps(name, many ? ask.account.handle : '');
-  label.textContent = `Drop your ${name} file`;
+  stepsEl.innerHTML = steps(askRange(ask.months), many ? ask.account.handle : '');
+  label.textContent = `Drop your ${title} file`;
   window._askAccount = ask.account;
 }
 
@@ -650,7 +679,7 @@ function bounds(key) {
 }
 function rangeOptions() {
   const sel = document.getElementById('range');
-  const want = [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['all', 'Everything']]
+  const want = [['1', 'Last day'], ['3', 'Last 3 days'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['all', 'Everything']]
     .map(([v, t]) => `<option value="${v}">${t}</option>`).join('')
     + allMonths().map(mk => `<option value="m${mk}">${MONTHS[+mk.slice(5) - 1]} ${mk.slice(0, 4)}</option>`).join('');
   if (sel.innerHTML !== want) { const keep = sel.value; sel.innerHTML = want; sel.value = keep || '30'; }
