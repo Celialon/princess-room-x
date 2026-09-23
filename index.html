@@ -117,6 +117,14 @@
                  font-size: 12px; font-weight: 700; padding: 8px 6px; cursor: pointer; }
   .tabs button.on { background: var(--pink-dim); color: var(--pink); }
 
+  /* five rows at a time, the rest an arrow away */
+  .pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 4px 0 2px; }
+  .pager span { font-size: 11px; font-weight: 700; color: var(--text-3); letter-spacing: .3px; }
+  .pager button { background: none; border: 1px solid var(--border-light); color: var(--text-2);
+                  width: 30px; height: 30px; border-radius: 50%; font-size: 12px; cursor: pointer; }
+  .pager button:disabled { opacity: .25; cursor: default; }
+  .pager button:not(:disabled):active { background: var(--pink-dim); color: var(--pink); }
+
   .ask-box { background: var(--pink-dim); border: 1px solid rgba(224,96,122,.35); border-radius: 12px; padding: 10px 14px; margin: 12px 0 2px; }
   .ask-month { font-family: 'Playfair Display', serif; font-size: 19px; font-weight: 700; color: var(--pink); margin-top: 2px; }
   .steps { counter-reset: s; padding: 0; margin: 10px 0 0; list-style: none; }
@@ -186,7 +194,7 @@
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <h2 style="margin:0">Earnings</h2>
-        <select id="range" style="width:auto" onchange="render()"></select>
+        <select id="range" style="width:auto" onchange="resetPages(); render()"></select>
       </div>
       <div id="totals"></div>
     </div>
@@ -194,9 +202,9 @@
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
         <h2 style="margin:0">Top products</h2>
-        <div class="tabs" style="width:170px">
-          <button id="sort-comm" class="on" onclick="setSort('comm')">💰 Earned</button>
-          <button id="sort-gmv" onclick="setSort('gmv')">🛍️ Sales</button>
+        <div class="tabs" style="width:186px">
+          <button id="prod-comm" class="on" onclick="setSort('prod','comm')">💰 Commission</button>
+          <button id="prod-gmv" onclick="setSort('prod','gmv')">🛍️ GMV</button>
         </div>
       </div>
       <div class="sub" style="margin:-4px 0 10px">Tap a product's square to give it a photo</div>
@@ -205,8 +213,14 @@
     </div>
 
     <div class="card">
-      <h2>Top videos</h2>
-      <div class="sub" style="margin-bottom:10px">The videos that actually made the sales</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <h2 style="margin:0">Top videos</h2>
+        <div class="tabs" style="width:186px">
+          <button id="vid-comm" class="on" onclick="setSort('vid','comm')">💰 Commission</button>
+          <button id="vid-gmv" onclick="setSort('vid','gmv')">🛍️ GMV</button>
+        </div>
+      </div>
+      <div class="sub" style="margin:4px 0 10px">The videos that actually made the sales</div>
       <div id="videos"></div>
     </div>
 
@@ -230,7 +244,8 @@
 const KEY = 'creator-room-v1';
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 let DB = load();
-let _sort = 'comm';
+let _sortP = 'comm';     // how each list is ranked
+let _sortV = 'comm';
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
@@ -631,6 +646,7 @@ async function handleFiles(files) {
       if (!account) { log.innerHTML = 'Import cancelled.'; continue; }
       const res = importRows(rows, account);
       save();
+      resetPages();
       log.innerHTML = (res.paid
           ? `✅ <b>@${esc(account.handle)}</b> · ${res.paid} paid orders from ${res.from} to ${res.to}`
             + (res.dropped ? ` · ${res.dropped} refunded or cancelled left out` : '')
@@ -688,10 +704,11 @@ function rangeOptions() {
 }
 
 // ─── Dashboard ──────────────────────────────────────────────
-function setSort(s) {
-  _sort = s;
-  document.getElementById('sort-comm').classList.toggle('on', s === 'comm');
-  document.getElementById('sort-gmv').classList.toggle('on', s === 'gmv');
+function setSort(which, s) {
+  if (which === 'prod') _sortP = s; else _sortV = s;
+  _page[which] = 0;
+  document.getElementById(which + '-comm').classList.toggle('on', s === 'comm');
+  document.getElementById(which + '-gmv').classList.toggle('on', s === 'gmv');
   render();
 }
 
@@ -740,20 +757,21 @@ function render() {
       if (s.o) prods.push({ id: pid, name: p.name, cur: a.cur, handle: a.handle, ...s });
     }
   }
-  prods.sort((x, y) => _sort === 'gmv' ? y.g - x.g : y.c - x.c);
-  const maxP = prods.length ? (_sort === 'gmv' ? prods[0].g : prods[0].c) : 1;
-  const shown = prods.slice(0, 10);
-  document.getElementById('products').innerHTML = shown.map((p, i) => `
+  prods.sort((x, y) => _sortP === 'gmv' ? y.g - x.g : y.c - x.c);
+  const maxP = prods.length ? (_sortP === 'gmv' ? prods[0].g : prods[0].c) : 1;
+  const offP = page('prod', prods.length);
+  document.getElementById('products').innerHTML = prods.slice(offP, offP + PER_PAGE).map((p, i) => `
     <div class="row">
-      <div class="rank">${i + 1}</div>
+      <div class="rank">${offP + i + 1}</div>
       ${prodThumb(p.id)}
       <div>
         <div class="rname">${esc(shortName(p.name))}</div>
-        <div class="bar"><i style="width:${(_sort === 'gmv' ? p.g : p.c) / maxP * 100}%"></i></div>
+        <div class="bar"><i style="width:${(_sortP === 'gmv' ? p.g : p.c) / maxP * 100}%"></i></div>
         <div class="rmeta">@${esc(p.handle)} · ${p.o} orders · organic ${rate(p.c - p.ac, p.g - p.ag)} · ads ${p.ag ? rate(p.ac, p.ag) : '—'}</div>
       </div>
       <div class="rval"><div class="m">${money(p.c, p.cur)}</div><div class="s">${money(p.g, p.cur)}</div></div>
-    </div>`).join('') || '<div class="sub" style="font-style:italic">Nothing in this range.</div>';
+    </div>`).join('') + pager('prod', offP, prods.length)
+    || '<div class="sub" style="font-style:italic">Nothing in this range.</div>';
 
   // ── videos ──
   const vids = [];
@@ -763,27 +781,51 @@ function render() {
       if (s.o) vids.push({ id: cid, name: v.name, cur: a.cur, handle: a.handle, ...s });
     }
   }
-  vids.sort((x, y) => _sort === 'gmv' ? y.g - x.g : y.c - x.c);
-  const maxV = vids.length ? (_sort === 'gmv' ? vids[0].g : vids[0].c) : 1;
-  document.getElementById('videos').innerHTML = vids.slice(0, 10).map((v, i) => {
+  vids.sort((x, y) => _sortV === 'gmv' ? y.g - x.g : y.c - x.c);
+  const maxV = vids.length ? (_sortV === 'gmv' ? vids[0].g : vids[0].c) : 1;
+  const offV = page('vid', vids.length);
+  const onScreen = vids.slice(offV, offV + PER_PAGE);
+  document.getElementById('videos').innerHTML = onScreen.map((v, i) => {
     const adsPct = v.c ? v.ac / v.c * 100 : 0;
     return `<div class="row">
-      <div class="rank">${i + 1}</div>
+      <div class="rank">${offV + i + 1}</div>
       ${thumb(v.id, v.handle, true)}
       <div>
         <div class="rname">${esc(shortName(v.name))}
           <a href="https://www.tiktok.com/@${esc(v.handle)}/video/${esc(v.id)}" target="_blank" rel="noopener"
              style="color:var(--pink);text-decoration:none;font-size:11px">▶</a></div>
-        <div class="bar"><i style="width:${(_sort === 'gmv' ? v.g : v.c) / maxV * 100}%"></i></div>
+        <div class="bar"><i style="width:${(_sortV === 'gmv' ? v.g : v.c) / maxV * 100}%"></i></div>
         <div class="rmeta">${v.o} orders · ${rate(v.c, v.g)} · organic ${(100 - adsPct).toFixed(0)}% · ads ${adsPct.toFixed(0)}%</div>
       </div>
       <div class="rval"><div class="m">${money(v.c, v.cur)}</div><div class="s">${money(v.g, v.cur)}</div></div>
     </div>`;
-  }).join('') || '<div class="sub" style="font-style:italic">No videos in this range — the export needs the "Content ID" column.</div>';
+  }).join('') + pager('vid', offV, vids.length)
+    || '<div class="sub" style="font-style:italic">No videos in this range — the export needs the "Content ID" column.</div>';
 
   // the covers arrive after the figures: only the videos on screen are looked up
-  ensureCovers(vids.slice(0, 10));
+  ensureCovers(onScreen);
 }
+
+// ─── Five at a time ─────────────────────────────────────────
+// A phone screen holds five rows comfortably; the rest is one arrow away.
+const PER_PAGE = 5;
+const _page = { prod: 0, vid: 0 };
+function page(which, total) {
+  const last = Math.max(0, Math.ceil(total / PER_PAGE) - 1);
+  _page[which] = Math.min(Math.max(_page[which], 0), last);
+  return _page[which] * PER_PAGE;
+}
+function pager(which, offset, total) {
+  if (total <= PER_PAGE) return '';
+  const to = Math.min(offset + PER_PAGE, total);
+  return `<div class="pager">
+    <button ${offset ? '' : 'disabled'} onclick="turnPage('${which}',-1)">◀</button>
+    <span>${offset + 1}–${to} of ${total}</span>
+    <button ${to < total ? '' : 'disabled'} onclick="turnPage('${which}',1)">▶</button>
+  </div>`;
+}
+function turnPage(which, step) { _page[which] += step; render(); }
+function resetPages() { _page.prod = 0; _page.vid = 0; }
 
 // ─── Product photos ─────────────────────────────────────────
 // TikTok does not let a web page read the product page, so there is no way to
