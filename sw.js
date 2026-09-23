@@ -1,6 +1,6 @@
 /* Princess Room X: the whole app is cached so it opens with no connection.
    There is no server here - the figures live in the browser's own storage. */
-const CACHE = 'princess-room-x-v7';
+const CACHE = 'princess-room-x-v8';
 const SHELL = ['./', './index.html', './manifest.json', './icon.png',
                'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
 
