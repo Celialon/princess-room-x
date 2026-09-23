@@ -487,6 +487,7 @@ function findColumns(header) {
 
 function importRows(rows, account) {
   const C = findColumns(rows[0] || []);
+  let currencyChanged = null;
   const NEEDED = { date: 'order date', status: 'settlement status', pid: 'product ID',
                    pname: 'product name', base: 'estimated commission base' };
   const missing = Object.entries(NEEDED).filter(([f]) => C[f] === undefined).map(([, label]) => label);
@@ -496,6 +497,20 @@ function importRows(rows, account) {
   }
   const at = (row, field) => C[field] === undefined ? undefined : row[C[field]];
   const unknownStatus = new Set();
+
+  // The export itself says what the money is: an account set up as euros but
+  // paid in dollars follows the file, not the guess made when it was added.
+  const CURRENCY_SIGN = { USD: '$', EUR: '€', GBP: '£' };
+  if (C.currency !== undefined) {
+    const seen = {};
+    for (const r of rows.slice(1)) {
+      const code = String(at(r, 'currency') || '').trim().toUpperCase();
+      if (code) seen[code] = (seen[code] || 0) + 1;
+    }
+    const main = Object.entries(seen).sort((a, b) => b[1] - a[1])[0];
+    const sign = main && CURRENCY_SIGN[main[0]];
+    if (sign && sign !== account.cur) { account.cur = sign; currencyChanged = sign; }
+  }
 
   const acc = account.handle;
   DB.days[acc] = DB.days[acc] || {}; DB.products[acc] = DB.products[acc] || {}; DB.videos[acc] = DB.videos[acc] || {};
@@ -560,7 +575,7 @@ function importRows(rows, account) {
     }
   }
   const days = [...touchedDays].sort();
-  return { paid, dropped, from: days[0], to: days[days.length - 1], unknownStatus: [...unknownStatus] };
+  return { paid, dropped, from: days[0], to: days[days.length - 1], unknownStatus: [...unknownStatus], currencyChanged };
 }
 
 // ─── What the app is asking for right now ───────────────────
@@ -678,6 +693,7 @@ async function handleFiles(files) {
           ? `✅ <b>@${esc(account.handle)}</b> · ${res.paid} paid orders from ${res.from} to ${res.to}`
             + (res.dropped ? ` · ${res.dropped} refunded or cancelled left out` : '')
           : `⚠️ <b>@${esc(account.handle)}</b> · the file was read but no order counted as paid`)
+        + (res.currencyChanged ? ` · this account is paid in ${res.currencyChanged}, so that is what it shows` : '')
         // a status this app has never seen means a language it doesn't know yet
         + (res.unknownStatus.length
             ? `<br><span style="color:var(--pink)">Unknown order status: ${res.unknownStatus.map(esc).join(', ')} — left out to be safe.</span>`
