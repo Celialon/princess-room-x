@@ -38,6 +38,14 @@
     width: 34px; height: 34px; border-radius: 50%; font-size: 15px; cursor: pointer; flex-shrink: 0;
   }
   .refresh:active { transform: rotate(180deg); transition: transform .3s; }
+
+  /* the gap that opens when the screen is pulled down */
+  .pull { position: fixed; top: 0; left: 0; right: 0; height: 0; z-index: 50;
+          display: flex; align-items: center; justify-content: center; overflow: hidden;
+          color: var(--pink); font-size: 21px; opacity: 0; pointer-events: none; }
+  .pull.ready { color: var(--pink-light); }
+  .pull.spin span { animation: pull-spin .8s linear infinite; }
+  @keyframes pull-spin { to { transform: rotate(360deg); } }
   .title { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; line-height: 1.15; letter-spacing: .5px; }
   /* the collaboration mark between the room and whoever owns it */
   .who-line { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
@@ -188,7 +196,7 @@
         <option value="OTHER|€|0">🌍 Other · €</option>
       </select>
       <div style="display:flex;gap:8px">
-        <button class="btn sm" onclick="saveAccount()">Save account</button>
+        <button class="btn sm" id="save-acc" onclick="saveAccount()">Save account</button>
         <button class="btn sm outline" onclick="toggleAdd(false)">Cancel</button>
       </div>
     </div>
@@ -341,17 +349,73 @@ async function ensureCovers(list) {
 // fetches the app again, skipping whatever the phone had cached.
 async function hardRefresh() {
   try {
+    // the worker goes first: while it is registered it can keep answering with
+    // whatever it has, however many times the page is reloaded
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.update().catch(() => {})));
+      await Promise.all(regs.map(r => r.unregister().catch(() => {})));
     }
     if (window.caches) {
       const keys = await caches.keys();
       await Promise.all(keys.map(k => caches.delete(k)));
     }
+    // and past the browser's own copy, which the host asks it to keep for a while
+    await fetch(location.pathname, { cache: 'reload' }).catch(() => {});
   } catch (e) { /* nothing cached, nothing to clear */ }
   location.replace(location.pathname + '?v=' + Date.now());
 }
+
+// ─── Pull down to refresh ───────────────────────────────────
+// An app on the home screen has no address bar to pull on, so the gesture is
+// built here: drag from the very top, a gap opens, and letting go reloads.
+(function pullToRefresh() {
+  const wrap = document.querySelector('.wrap') || document.body;
+  const bar = document.createElement('div');
+  bar.className = 'pull';
+  bar.innerHTML = '<span>↻</span>';
+  document.body.appendChild(bar);
+  const arrow = bar.firstChild;
+  const MAX = 90, TRIGGER = 62;
+  let startY = null, dist = 0, pulling = false;
+
+  function open(d) {
+    dist = d;
+    wrap.style.transform = d ? `translateY(${d}px)` : '';
+    bar.style.height = d + 'px';
+    bar.style.opacity = Math.min(1, d / TRIGGER);
+    arrow.style.transform = `rotate(${Math.round(d * 4)}deg)`;
+    bar.classList.toggle('ready', d >= TRIGGER);
+  }
+  function close() {
+    wrap.style.transition = 'transform .25s ease';
+    open(0);
+    setTimeout(() => { wrap.style.transition = ''; }, 260);
+  }
+
+  addEventListener('touchstart', e => {
+    startY = (window.scrollY <= 0 && e.touches.length === 1) ? e.touches[0].clientY : null;
+    pulling = false;
+  }, { passive: true });
+
+  addEventListener('touchmove', e => {
+    if (startY === null) return;
+    const d = e.touches[0].clientY - startY;
+    if (d <= 0 || window.scrollY > 0) { if (pulling) { pulling = false; open(0); } return; }
+    pulling = true;
+    e.preventDefault();                       // no rubber-banding while pulling
+    open(Math.min(MAX, d * 0.55));            // a little resistance, like the real one
+  }, { passive: false });
+
+  addEventListener('touchend', () => {
+    if (!pulling) { startY = null; return; }
+    const go = dist >= TRIGGER;
+    startY = null; pulling = false;
+    if (!go) { close(); return; }
+    bar.classList.add('spin');
+    open(TRIGGER);
+    hardRefresh();
+  });
+})();
 
 function toast(msg) {
   const t = document.createElement('div');
@@ -372,19 +436,48 @@ who.value = DB.name;
 who.addEventListener('input', () => { DB.name = who.value.trim(); save(); });
 
 // ─── Accounts ───────────────────────────────────────────────
+let _editing = null;                 // the account being corrected, if any
 function toggleAdd(on) {
   document.getElementById('add-account').classList.toggle('hide', !on);
   document.getElementById('add-btn').classList.toggle('hide', on);
+  if (!on) { _editing = null; document.getElementById('acc-handle').value = ''; }
+  document.getElementById('save-acc').textContent = _editing ? 'Save changes' : 'Save account';
   if (on) document.getElementById('acc-handle').focus();
 }
+// Picked the wrong country when adding it? Change it here — the months already
+// loaded stay where they are, and follow the account if the name changes too.
+function editAccount(handle) {
+  const a = DB.accounts.find(x => x.handle === handle);
+  if (!a) return;
+  _editing = handle;
+  document.getElementById('acc-handle').value = a.handle;
+  const sel = document.getElementById('acc-market');
+  const match = [...sel.options].find(o => o.value.startsWith(a.market + '|'));
+  sel.value = match ? match.value : sel.options[0].value;
+  toggleAdd(true);
+}
 function saveAccount() {
-  let handle = document.getElementById('acc-handle').value.trim().replace(/^@/, '');
+  const handle = document.getElementById('acc-handle').value.trim().replace(/^@/, '');
   if (!handle) { toast('Type your account name'); return; }
-  const [market, cur, cut] = document.getElementById('acc-market').value.split('|');
-  if (DB.accounts.some(a => a.handle.toLowerCase() === handle.toLowerCase())) { toast('That account is already here'); return; }
-  DB.accounts.push({ handle, market, cur, cut: +cut });
+  const [market, cur] = document.getElementById('acc-market').value.split('|');
+  const taken = DB.accounts.some(a => a.handle.toLowerCase() === handle.toLowerCase()
+                                   && a.handle !== _editing);
+  if (taken) { toast('That account is already here'); return; }
+
+  if (_editing) {
+    const a = DB.accounts.find(x => x.handle === _editing);
+    if (handle !== _editing) {                       // the months move with the name
+      for (const store of [DB.days, DB.products, DB.videos]) {
+        if (store[_editing]) { store[handle] = store[_editing]; delete store[_editing]; }
+      }
+      if (DB.avatars[_editing]) { DB.avatars[handle] = DB.avatars[_editing]; delete DB.avatars[_editing]; }
+    }
+    Object.assign(a, { handle, market, cur });
+    toast(`@${handle} · ${market} · ${cur}`);
+  } else {
+    DB.accounts.push({ handle, market, cur });
+  }
   save();
-  document.getElementById('acc-handle').value = '';
   toggleAdd(false);
   renderAccounts(); render();
 }
@@ -422,6 +515,7 @@ function renderAccounts() {
         <div class="acc-meta">${a.market} · <button class="cur-chip" onclick="cycleCurrency('${esc(a.handle)}')"
              title="The currency this account is paid in">${a.cur}</button> · ${months.size ? months.size + ' month' + (months.size > 1 ? 's' : '') + ' loaded' : 'no data yet'}</div>
       </div>
+      <button class="btn sm outline" onclick="editAccount('${esc(a.handle)}')" title="Change the country or the currency">✎</button>
       <button class="btn sm outline" onclick="removeAccount('${esc(a.handle)}')">✕</button>
     </div>`;
   }).join('');

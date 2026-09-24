@@ -1,6 +1,6 @@
 /* Princess Room X: the whole app is cached so it opens with no connection.
    There is no server here - the figures live in the browser's own storage. */
-const CACHE = 'princess-room-x-v10';
+const CACHE = 'princess-room-x-v11';
 const SHELL = ['./', './index.html', './manifest.json', './icon.png',
                'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
 
@@ -24,7 +24,9 @@ self.addEventListener('fetch', e => {
   // is there the next time the app is opened; the cached copy is what keeps it
   // working on a train with no signal.
   if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request)
+    // GitHub Pages tells browsers to keep the page for ten minutes, which is how
+    // an update can be published and still not show up. 'reload' goes past that.
+    e.respondWith(fetch(new Request(e.request.url, { cache: 'reload' }))
       .then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
       .catch(() => caches.match(e.request).then(hit => hit || caches.match('./'))));
     return;
